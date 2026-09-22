@@ -1,0 +1,128 @@
+# ============================================================
+#  童年游戏厅 —— 公开仓库排除规则
+#  原则：宁可多排除，漏进来的再单独加。已排除的都有注释说明原因。
+# ============================================================
+
+# ---------- 1. 敏感凭据（公开仓库绝不可出现）----------
+# .workbuddy/ 含项目记忆，里面有明文 SSH 密码与内网地址
+.workbuddy/
+*.env
+.env*
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+*credential*
+*secret*
+trust-arcade-origin.reg
+undo-trust-arcade-origin.reg
+
+# ---------- 2. ROM / BIOS / 核心包 ----------
+# 版权敏感 + 体积巨大（单文件可达 24MB），绝不提交
+*.zip
+*.bin
+*.7z
+*.rar
+*.img
+*.rom
+*.cue
+*.iso
+*.dat
+roms/
+cores/
+bios/
+_romset/
+_fba_wasm
+*fbneo-setnames.json
+*romindex*
+*thumbs.json
+
+# ---------- 3. 临时产物与调试文件 ----------
+# 项目约定：下划线前缀 = 一次性临时文件
+_*
+*.bak
+*.bak-*
+*.out
+*.log
+*.tmp
+__pycache__/
+*.pyc
+
+# ---------- 4. 本地回收目录 ----------
+.trash_*/
+
+# ---------- 5. 调试截图（体积大且无长期价值）----------
+# 例外：sango2-guide 是交付产物，其配图需要保留
+*.png
+!sango2-guide/images/**
+nas-deploy/*.jpg
+nas-deploy/*.jpeg
+nas-deploy/*.gif
+
+# ---------- 6. 部署补丁产物 ----------
+# 第三方站点编译产物 + 含内网结构，公开仓库不收录
+nas-deploy/Player-*.js
+nas-deploy/Player-*.css
+nas-deploy/index-*.js
+nas-deploy/Admin-*.js
+nas-deploy/Admin-*.css
+nas-deploy/Gallery-*.js
+nas-deploy/Gallery-*.css
+nas-deploy/Rooms-*.js
+nas-deploy/Rooms-*.css
+nas-deploy/UploadDialog-*.js
+nas-deploy/platforms-*.js
+nas-deploy/*.js.remote
+nas-deploy/*.js.pre-*
+nas-deploy/web/
+nas-deploy/remote/
+nas-deploy/_base/
+nas-deploy/_snap/
+nas-deploy/_cov/
+nas-deploy/_icon/
+
+# ---------- 7. 内部运维手册 ----------
+# 含真实账号名、用户表 id/role、内网数据与操作记录，不公开。
+# 文件保留在本地供运维使用，通用知识已提炼到 docs/TECH-NOTES.md。
+nas-deploy/HANDBOOK.md
+
+# ---------- 8. 第三方上游源码与站点产物 ----------
+# childhood-arcade 的服务端代码（Hono + drizzle），版权属上游。
+# 这些文件是部署所需的产物副本，保留在本地，只是不进仓库。
+nas-deploy/auth.js
+nas-deploy/auth-route.js
+nas-deploy/db-index.js
+nas-deploy/input-mapping.js
+nas-deploy/room-hub.js
+nas-deploy/schema.js
+nas-deploy/server-index.js
+nas-deploy/covers.js
+nas-deploy/roms.js
+nas-deploy/roms_patched.js
+nas-deploy/UploadDialog_patched.js
+nas-deploy/index.html
+nas-deploy/favicon.svg
+nas-deploy/favicon.ico
+nas-deploy/apple-touch-icon.png
+
+# ---------- 9. 抓取残留与测试桩 ----------
+nas-deploy/tree_tmp.json
+nas-deploy/org.json
+nas-deploy/nestopia_tree.json
+nas-deploy/0
+nas-deploy/ab_fake_pad_at1.js
+nas-deploy/ab_fake_pads_4.js
+nas-deploy/ab_stub_gamepadevent.js
+
+# ---------- 10. 与本项目无关的其它工具配置 ----------
+# reasonix.toml 是别的工具的权限白名单（含 rm -rf 等命令），误留在工作区
+reasonix.toml
+
+# ---------- 11. 系统 / 编辑器 ----------
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*~

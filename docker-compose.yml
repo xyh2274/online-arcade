@@ -1,0 +1,56 @@
+# 在线游戏厅 · docker-compose 初稿
+# 阶段 1：只启用 childhood-arcade 跑通；阶段 2：取消 emulatorjs 段的注释。
+# 用法：在本文件所在目录执行  docker compose up -d
+# 凭据：TUNNEL_TOKEN 从同目录 .env 读取（复制 .env.example 填写），勿写死在本文件里。
+
+services:
+  childhood-arcade:
+    image: yize8888/childhood-arcade:latest
+    container_name: childhood-arcade
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # 首次启动默认账号 admin / admin123，登录后立即修改！
+      # 也可取消下面两行注释自定义初始账号
+      # ADMIN_USERNAME: admin
+      # ADMIN_PASSWORD: change-me-please
+      # 单文件上传上限（字节），默认 100MB，街机大 ROM 可调大
+      MAX_UPLOAD_BYTES: "524288000"
+      # 保持 production：前端静态服务依赖此模式；Cookie 的 Secure 问题由
+      # ./patches/auth.js 挂载补丁解决（若将来全站 HTTPS 可移除该挂载）
+    volumes:
+      - ./arcade-data:/data
+      # 共享 ROM 库（只读），与 EmulatorJS 共用同一份
+      - ./roms:/data/roms:ro
+      # 上游 bug 补丁：production 模式下登录 Cookie 带 Secure，纯 HTTP 会被浏览器拒收
+      # 摘除 Secure 标记的补丁文件（覆盖容器内同名文件，重建/升级不丢）
+      - ./patches/auth.js:/app/server/middleware/auth.js:ro
+      # UX 补丁：上传弹窗点击遮罩不再关闭（防止误触丢上传）
+      - ./patches/UploadDialog-kZO6Kb_z.js:/app/dist/assets/UploadDialog-kZO6Kb_z.js:ro
+
+  # ---- 阶段 2 再启用 ----
+  # emulatorjs:
+  #   image: linuxserver/emulatorjs:latest   # 拉取失败可改 1.9.2
+  #   container_name: emulatorjs
+  #   restart: unless-stopped
+  #   ports:
+  #     - "8080:80"      # 游玩前台
+  #     - "4300:3000"    # 管理后台（扫 ROM / 下载核心 / 刮封面）
+  #   environment:
+  #     - PUID=0
+  #     - PGID=0
+  #     - TZ=Asia/Shanghai
+  #   volumes:
+  #     - ./ejs-config:/config
+  #     - ./roms:/data   # 与童年游戏厅共享同一份 ROM
+
+  # ---- Cloudflare Tunnel ----
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      # Token 属敏感凭据：写入 .env 文件，不要提交到仓库
+      - TUNNEL_TOKEN=${TUNNEL_TOKEN:?未设置 —— 请复制 .env.example 为 .env 并填写}

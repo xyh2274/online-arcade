@@ -1,0 +1,5 @@
+# 行尾规范化：仓库内统一存 LF
+* text=auto
+
+# Shell 脚本必须始终是 LF —— CRLF 会让 Linux 报 "bad interpreter: /bin/bash^M"
+*.sh text eol=lf

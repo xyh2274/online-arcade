@@ -1,0 +1,378 @@
+/* ============================================================================
+   童年游戏厅 · 响应式设计层  arcade-responsive.css
+   ----------------------------------------------------------------------------
+   设计背景（2026-09-16 移动端实测审计，全部有硬数据）：
+
+   现有设计系统（index-BzGgSceD.css 的 :root）本身是**现代且完整**的：
+   Indigo 主色、完整的 --r-* / --shadow-* / --ease-* / --t-* 令牌、
+   .app-shell 已用 100dvh、已设 touch-action:manipulation、已尊重
+   prefers-reduced-motion。**所以本文件不重做视觉，只补它缺的那一半：响应式与可达性。**
+
+   实测出的 6 个真问题（移动端 390x844）：
+
+   ① 🔴 横向溢出（最严重）—— 内容被切掉，右侧徽标/标签看不见
+      .grid{grid-template-columns:repeat(auto-fill,minmax(240px,1fr))}
+      容器 358px，但算出 **427.547px** 的列 ⇒ 92 个元素溢出、页面横滚 54px。
+      根因是 CSS 经典陷阱：**`1fr` 的隐式 `min-width:auto`**
+      + 卡内 `white-space:nowrap` 的长文本（平台名 / @昵称）不可收缩 ⇒ 把列撑宽。
+      收缩试验：容器压到 200px，这些元素仍是 428/334/288px —— 整条链完全不缩。
+
+   ② 触摸目标 < 44px（技能规范 ux-guidelines #22，High）
+      实测 31/32 个可点元素低于 44px：.theme-btn 32x32、.user-chip h28、
+      .nav-item w42、.brand 28x28、.fav-btn 22。
+   ③ 字号 < 12px：26 处（11px 的徽标/计数/头像字）
+   ④ 顶栏在 390px 上过挤（品牌 + 4 个导航 + 主题 + 用户 挤一行）
+   ⑤ .tabs 横向可滚（scrollW 509 > 358）但**没有任何"右边还有内容"的提示**
+   ⑥ 🔴 播放页横屏：虚拟按键盖住**游戏画面本体 40%**
+      （竖屏只盖到黑边，所以竖屏不明显 —— 这正是"横屏反而更差"的原因）
+      实测：canvas 794x318，vpad 盖住底部 127px。
+      算出「游戏图像」= 4:3 适配后高 318px 全部被用满 ⇒ 底部 127px 真被切。
+
+   ── 写法约定 ──────────────────────────────────────────────────────────────
+   * **一律 `!important`**：产物里的规则带 Vue scoped 属性（`.nav-item[data-v-xxx]`，
+     特异性 0,2,0），本文件是外链、无 scoped 属性（0,1,0）⇒ 不加会**全部失效**。
+     本项目既有 CSS 补丁（brand-icon / romlist-full / mobile-ux）同样用 `!important`。
+   * **只加不改**：新令牌用 `--ds-` 前缀，不覆盖产物已有的 `--r-md` / `--accent` 等。
+   * **桌面不受影响**：会改变桌面观感的规则一律包在移动端媒体查询里。
+   * 断点（技能规范 #64 mobile-first，改用 min-width 递增会与产物既有
+     max-width 规则打架，故沿用 max-width 以免回归）：
+       手机   <= 640px      平板 641-1024px      桌面 >= 1025px
+   ========================================================================== */
+
+/* ===========================================================================
+   0 · 设计令牌（补充产物缺失的部分）
+   产物已有：颜色 / 圆角 / 阴影 / 动效 / 字体 —— 这里只补**间距与字号刻度**
+   （原来两者都是散落的字面量，没有体系），以及触摸与安全区令牌。
+   =========================================================================== */
+:root {
+  /* 间距刻度：4px 基准，1.5 倍递增 —— 全站布局只用这些值 */
+  --ds-space-1: 4px;
+  --ds-space-2: 8px;
+  --ds-space-3: 12px;
+  --ds-space-4: 16px;
+  --ds-space-5: 20px;
+  --ds-space-6: 24px;
+  --ds-space-8: 32px;
+  --ds-space-10: 40px;
+  --ds-space-12: 48px;
+
+  /* 流动字号：小屏不挤、大屏不空。clamp(最小, 首选, 最大)
+     ⚠️ 最小值的写法要小心：若「首选值」在小屏上高于「最小值」，clamp 取首选值 ——
+        第一版写成 clamp(11.5px, 0.71rem + 0.1vw, 12px)，390px 下解出 11.75px，
+        仍然小于 12px ⇒ 26 处"字号过小"一个都没修掉。**下限必须直接写目标值。** */
+  --ds-text-2xs: clamp(12px, 0.72rem + 0.15vw, 13.5px);
+  --ds-text-xs: clamp(12px, 0.74rem + 0.12vw, 12.5px);
+  --ds-text-sm: clamp(12.5px, 0.77rem + 0.15vw, 13.5px);
+  --ds-text-base: clamp(13.5px, 0.83rem + 0.18vw, 15px);
+  --ds-text-lg: clamp(15px, 0.9rem + 0.3vw, 17px);
+  --ds-text-xl: clamp(17px, 1rem + 0.6vw, 22px);
+
+  /* 触摸目标（技能规范 #22：最小 44x44；#23：相邻间距 >= 8px） */
+  --ds-tap-min: 44px;
+  --ds-tap-gap: 8px;
+
+  /* 安全区（刘海屏 / 独立模式） */
+  --ds-safe-t: env(safe-area-inset-top, 0px);
+  --ds-safe-r: env(safe-area-inset-right, 0px);
+  --ds-safe-b: env(safe-area-inset-bottom, 0px);
+  --ds-safe-l: env(safe-area-inset-left, 0px);
+
+  /* 虚拟按键实测高度（由 JS 写入，见 [patch] vpad-metric；兜底值按街机横屏实测 144） */
+  --ds-vpad-h: 150px;
+
+  /* 单行文本截断的语义化写法 */
+  --ds-page-gutter: var(--ds-space-4);
+}
+
+@media (min-width: 641px) {
+  :root { --ds-page-gutter: var(--ds-space-6); }
+}
+
+/* ===========================================================================
+   1 · 🔴 根治横向溢出（问题 ①）
+   —— 本文件最重要的一段：修完这条，"内容被切掉"就没了。
+   =========================================================================== */
+
+/* 1.1 让网格列可收缩。
+   `minmax(240px, 1fr)` 里的 `1fr` 等价于 `minmax(auto, 1fr)`，
+   auto 最小尺寸 = 内容 min-content ⇒ 被 nowrap 长文本顶穿。
+   改成 `min(240px, 100%)` 作为下限：容器比 240 窄时下限就跟着降，永不溢出。 */
+.grid { grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr)) !important; }
+
+/* 1.2 网格/弹性子项一律允许收缩（关掉 min-width:auto 这个陷阱） */
+.grid > *,
+.tile,
+.tile-body,
+.tile-top,
+.tile-sub { min-width: 0 !important; }
+
+/* 1.3 卡内 nowrap 文本改为「可收缩 + 省略号」。
+   原来 span 是 overflow:visible + min-width:auto ⇒ 整段文本宽度成为最小宽度。
+   现在允许收缩，超出部分用 … 截断 —— 布局不再被文本长度绑架。 */
+.tile-title,
+.tile-sub > * { min-width: 0 !important; overflow: hidden !important; text-overflow: ellipsis !important; }
+
+/* 1.4 兜底：任何直接放在 flex 行里的长文本也一样可截断 */
+.tile-sub { overflow: hidden !important; }
+
+/* 1.5 全站防溢出兜底（不影响横向滚动容器的自身滚动） */
+img, svg, video, canvas { max-width: 100%; }
+.container, .app-shell { max-width: 100%; }
+
+/* ===========================================================================
+   2 · 触摸可达性（问题 ②③）—— 技能规范 #22 / #23，High
+   =========================================================================== */
+@media (pointer: coarse), (max-width: 768px) {
+
+  /* 2.1 图标按钮：视觉尺寸基本保留，把**命中区**撑到 44px。
+     用 min-* 而不是 width/height，避免把图标本身放大。 */
+  .theme-btn,
+  .brand,
+  .fav-btn {
+    min-width: var(--ds-tap-min) !important;
+    min-height: var(--ds-tap-min) !important;
+  }
+  /* 图标本身保持原大小居中 */
+  .theme-btn > svg, .brand > *, .fav-btn > svg { flex: 0 0 auto; }
+
+  /* 2.2 顶栏导航项：高度补到 44（宽度由文字自然决定，见 3.4 的独占一行方案） */
+  .nav-item {
+    min-height: var(--ds-tap-min) !important;
+    padding: 0 var(--ds-space-3) !important;
+  }
+
+  /* 2.2.1 🔴 文字一律不换行 —— 这条是必须的，否则会出「竖排文字」事故：
+     我第一版给 .nav-item 加了 min-width:44px，但它同时有 padding:0 12px
+     ⇒ 44px 里只剩 20px 放文字，而「游戏库」要 39px ⇒ 中文**逐字换行**，
+     导航变成竖排（截图当场看到）。
+     ⚠️ min-width 是下限、不是上限，所以只要不换行，元素会自己长到够宽。 */
+  .nav-item,
+  .tab,
+  .seg-btn,
+  .btn,
+  .user-chip { white-space: nowrap !important; }
+
+  /* 2.3 用户胶囊：高度 28 → 44 */
+  .user-chip { min-height: var(--ds-tap-min) !important; }
+
+  /* 2.4 相邻触摸目标间距 >= 8px（规范 #23） */
+  .nav, header nav, .inner { gap: var(--ds-tap-gap) !important; }
+  .page-head-actions > * + *, .tabs > * + * { margin-left: var(--ds-tap-gap) !important; }
+
+  /* 2.5 字号下限：把产物里所有 10-11px 的**文字**拉到 12px。
+     依据：扫产物 CSS 得到全部 <12px 声明的类名清单（不是猜的）。
+     ⚠️ 只列"给人读的字"：徽标、计数、标签、状态文字。
+        刻意**不**动虚拟按键上的字号（.sys-btn 见 7.2 的横屏压缩取舍）。 */
+  .n,
+  .chip-count,
+  .avatar-txt,
+  .ver-badge,
+  .tile-plat,
+  .plat-badge,
+  .pill-tag,
+  .warn-badge,
+  .row-idx,
+  .bar-badge,
+  .bar-core,
+  .playing-led,
+  .stick-arrow,
+  .rp-state,
+  .rp-section-title { font-size: var(--ds-text-2xs) !important; }
+
+  /* 2.6 通用可点元素整体抬高：.btn / .seg-btn / .tab，以及**表单控件**
+     （搜索框实测 167x32、管理页输入框 308x36 —— 都是 <44px） */
+  .btn, .seg-btn, .tab,
+  input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
+  select, textarea {
+    min-height: var(--ds-tap-min) !important;
+  }
+  /* 输入框内边距随高度微调，文字才居中 */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
+  select { padding-top: 0 !important; padding-bottom: 0 !important; }
+
+  /* 2.7 开关行：复选框本身是**原生控件**，对 padding 不生效（实测设 11px 后
+     计算值仍是 0px）；真正管用的是它外面的 <label class="toggle-row">。
+     所以直接把整行撑到 44px —— 点标签任意位置都能切换，这也是原生行为。 */
+  .toggle-row, .toggle-sw, label.toggle-row {
+    min-height: var(--ds-tap-min) !important;
+  }
+}
+
+/* ===========================================================================
+   3 · 顶栏与导航（问题 ④）—— 390px 宽度下的信息密度
+   =========================================================================== */
+@media (max-width: 640px) {
+  /* 3.1 顶栏两行布局：首行「品牌 + 右侧操作」，次行「导航独占整行」。
+     为什么必须独占一行：390px 下 品牌 + 右侧操作 + 间距之后只剩约 193px，
+     而 4 个导航项在「不换行 + 内边距」下需要约 220px ⇒ 单行物理上塞不下，
+     硬塞就会把文字挤成竖排（第一版事故）。
+     独占一行后 390px 绰绰有余，且不再需要横向滚动、不会有条目被藏起来。
+
+     🔴 关键：产物给 `.inner` 写的是**固定高度** `height:var(--header-h)`（52px）。
+        只加 flex-wrap 而不管高度 ⇒ 内容变两行但盒子还是 52px ⇒ 第二行
+        **溢出到 header 之外**，被画在页面标题上（第二版事故，截图可见"游戏库"重影）。
+        必须把高度改成 auto，让盒子跟着内容长。 */
+  header .inner,
+  header > div,
+  .topbar {
+    flex-wrap: wrap !important;
+    height: auto !important;
+    min-height: var(--header-h) !important;
+    align-content: center !important;
+    row-gap: var(--ds-space-1) !important;
+    padding-top: calc(var(--ds-safe-t) + var(--ds-space-2)) !important;
+    padding-bottom: var(--ds-space-2) !important;
+    padding-left: calc(var(--ds-page-gutter) + var(--ds-safe-l)) !important;
+    padding-right: calc(var(--ds-page-gutter) + var(--ds-safe-r)) !important;
+  }
+  /* 顶栏吸顶时高度是变动的，导航行也一起吸住 */
+  .app-header { height: auto !important; }
+
+  /* 3.3 导航条铺满次行；条目右侧对齐，与首行操作列对齐 */
+  .nav {
+    flex-basis: 100% !important;
+    order: 3 !important;
+    justify-content: flex-end !important;
+    height: 40px !important;
+    align-items: center !important;
+  }
+
+  /* 3.4 首行右侧操作永远贴右（导航被移到次行后，它要顶上来） */
+  .header-right { margin-left: auto !important; }
+  .nav-item { margin-bottom: 0 !important; }
+
+  /* 3.3 页面标题：28px 在手机上过大，交给流动刻度（22px 上限） */
+  .page-title { font-size: var(--ds-text-xl) !important; }
+  .page-sub { font-size: var(--ds-text-sm) !important; }
+  .container { padding-left: calc(var(--ds-page-gutter) + var(--ds-safe-l)) !important;
+               padding-right: calc(var(--ds-page-gutter) + var(--ds-safe-r)) !important; }
+}
+
+/* ===========================================================================
+   4 · 卡片网格的响应式列数
+   产物在 <=480px 强制 1 列（列表式卡片，方向对）；中间尺寸缺档位。
+   这里补齐：手机竖屏 1 列 → 大屏手机/平板 2 列 → 宽屏走 auto-fill。
+   =========================================================================== */
+@media (max-width: 480px) {
+  /* 保持 1 列（横向卡片：缩略图在左），但确保内容不溢出 */
+  .grid { grid-template-columns: 1fr !important; }
+}
+@media (min-width: 481px) and (max-width: 900px) {
+  /* 大屏手机横屏 / 小平板：两列更充分利用宽度 */
+  .grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+}
+
+/* ===========================================================================
+   5 · 滚动可见性（问题 ⑤）—— 让"右边还有内容"看得出来
+   .tabs 本身是设计内可滚动的（overflow-x:auto），但没有任何提示。
+   用「右缘渐隐 + 细滚动条」表达可滚动；滚到末尾渐隐自动消失（scroll-driven 不可用时的最佳近似）。
+   =========================================================================== */
+@media (pointer: coarse), (max-width: 768px) {
+  .tabs {
+    overscroll-behavior-x: contain !important;   /* 规范 #26：别触发页面级横向手势 */
+    scrollbar-width: thin !important;
+    -webkit-overflow-scrolling: touch !important;
+    /* 右缘渐隐遮罩：暗示右侧还有内容 */
+    mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent 100%);
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent 100%);
+  }
+  .tabs::-webkit-scrollbar { height: 3px !important; }
+  .tabs::-webkit-scrollbar-thumb { background: var(--border-strong) !important; border-radius: 999px !important; }
+  .tabs::-webkit-scrollbar-track { background: transparent !important; }
+}
+
+/* ===========================================================================
+   6 · 全站触感与可达性（技能规范 #11 / #20 / #25 / #26，以及专业默认）
+   =========================================================================== */
+
+/* 6.1 键盘可达性：统一可见焦点环（鼠标点击不显示，键盘 Tab 才显示） */
+:focus-visible {
+  outline: 2px solid var(--accent) !important;
+  outline-offset: 2px !important;
+  border-radius: var(--r-sm);
+}
+.nav-item:focus-visible,
+.tile:focus-visible {
+  box-shadow: var(--shadow-focus) !important;
+  outline: none !important;
+}
+
+/* 6.2 移动端滚动手感：避免"下拉刷新"误触（规范 #26）
+   ⚠️ 只加在内容容器上，**不加在 body**（否则会禁掉整页滚动） */
+.tabs, .rom-list, .nav, .rp-list, .rp-log { overscroll-behavior: contain !important; }
+
+/* 6.3 移动端不做 hover 位移（悬停效果在触摸设备上会"粘住"，规范 #11） */
+@media (hover: none) {
+  .tile:hover { transform: none !important; box-shadow: none !important; }
+}
+
+/* 6.4 图片/封面不拖拽、不选中（移动端长按弹菜单很烦） */
+.tile-art img, .tile-art svg, canvas, .portal-canvas {
+  -webkit-user-drag: none; user-select: none; -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* ===========================================================================
+   7 · 播放页（问题 ⑥）—— 横屏下虚拟按键盖住游戏画面本体 40%
+   ---------------------------------------------------------------------------
+   实测（横屏 844x390）：canvas 794x318，vpad 盖住底部 127px。
+   街机 4:3 画面按高度撑满 318px ⇒ **底部 127px 是真实游戏内容**（血条/地面），
+   不是黑边。竖屏因为 4:3 在竖长容器里上下留黑，所以盖到的是黑边（故竖屏不明显）。
+
+   做法：把虚拟按键的高度**测量出来**（JS 写 --ds-vpad-h），在 emu-area 底部
+   预留同高空间 ⇒ 画面整体上移、完整可见；按键浮在下方空区，不再压画面。
+   横屏同时把按键压扁一点，把省下的空间还回画面。
+
+   开关：localStorage['arcade-pad-reserve']==='0' 关闭预留（恢复原覆盖式）。
+   =========================================================================== */
+.player-page { --ds-pad-reserve: var(--ds-vpad-h); }
+body.arcade-pad-reserve-off { --ds-pad-reserve: 0px !important; }
+
+/* 7.1 有虚拟按键的页面：底部预留按键高度。
+   ⚠️ 整段限定在**触屏设备**：桌面宽屏一般不出虚拟按键，即便出了也不该白白
+      让出 150px 高度把画面压小。 */
+@media (pointer: coarse) {
+  .player-page:has(.vpad) .emu-area {
+    padding-bottom: calc(var(--ds-pad-reserve) + var(--ds-safe-b)) !important;
+  }
+}
+
+/* 7.2 横屏：把按键压扁（省下的高度全部还给画面）
+   只压缩纵向 padding 与按键高度，圆角与配色不动 —— 手感优先。 */
+@media (orientation: landscape) and (max-height: 520px) {
+  .vpad { padding-top: 4px !important; padding-bottom: calc(4px + var(--ds-safe-b)) !important; }
+  .sys-btn { padding: 4px 12px !important; font-size: 10px !important; }
+  .sh-btn { padding: 5px 14px !important; font-size: 11px !important; }
+  .stick, .face { width: 118px !important; height: 118px !important; }
+  .stick-knob { width: 52px !important; height: 52px !important; margin: -26px 0 0 -26px !important; }
+  .face-btn { width: 42px !important; height: 42px !important; }
+  .face-fc .face-btn, .face-gba .face-btn { width: 48px !important; height: 48px !important; }
+  .face-md .face-btn { width: 38px !important; height: 38px !important; }
+  .vpad-center { padding-bottom: 2px !important; }
+}
+
+/* 7.3 全屏时不留圆角/内边距（配合 [patch] mobile-ux 的全屏目标修正） */
+@media (pointer: coarse) {
+  .player-page:fullscreen .emu-area,
+  .player-page:-webkit-full-screen .emu-area {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    padding-top: 0 !important;
+    /* 底部仍保留按键高度 —— 全屏是"要按键也要画面"的场景 */
+    padding-bottom: calc(var(--ds-pad-reserve) + var(--ds-safe-b)) !important;
+  }
+}
+
+/* ===========================================================================
+   8 · 平板与桌面（>= 641px）—— 确保手机端的调整不外溢
+   =========================================================================== */
+@media (min-width: 641px) {
+  /* 8.1 触摸目标规则只作用于窄屏/触屏，宽屏恢复原有紧凑尺寸由产物原规则接管，
+       这里显式声明以免 media 边界处出现闪烁 */
+  .nav-item { min-width: auto !important; }
+}
+
+/* 8.2 减少动效偏好：产物已处理，这里补上本文件引入的过渡 */
+@media (prefers-reduced-motion: reduce) {
+  .tabs, .nav { scroll-behavior: auto !important; }
+}

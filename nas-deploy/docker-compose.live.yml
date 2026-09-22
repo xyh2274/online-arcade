@@ -1,0 +1,88 @@
+# 在线游戏厅 · docker-compose 初稿
+# 阶段 1：只启用 childhood-arcade 跑通；阶段 2：取消 emulatorjs 段的注释。
+# 用法：在本文件所在目录执行  docker compose up -d
+
+services:
+  childhood-arcade:
+    image: yize8888/childhood-arcade:latest
+    container_name: childhood-arcade
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # 首次启动默认账号 admin / admin123，登录后立即修改！
+      # 也可取消下面两行注释自定义初始账号
+      # ADMIN_USERNAME: admin
+      # ADMIN_PASSWORD: change-me-please
+      # 单文件上传上限（字节），默认 100MB，街机大 ROM 可调大
+      MAX_UPLOAD_BYTES: "524288000"
+      # 头像存放目录（持久卷 /data 下）
+      AVATARS_DIR: "/data/avatars"
+      # 保持 production：前端静态服务依赖此模式；Cookie 的 Secure 问题由
+      # ./patches/auth.js 挂载补丁解决（若将来全站 HTTPS 可移除该挂载）
+    volumes:
+      - ./arcade-data:/data
+      # 共享 ROM 库（只读），与 EmulatorJS 共用同一份
+      - ./roms:/data/roms:ro
+      # 上游 bug 补丁：production 模式下登录 Cookie 带 Secure，纯 HTTP 会被浏览器拒收
+      # 摘除 Secure 标记的补丁文件（覆盖容器内同名文件，重建/升级不丢）
+      - ./patches/auth.js:/app/server/middleware/auth.js:ro
+      # UX 补丁：上传弹窗点击遮罩不再关闭（防止误触丢上传）
+      - ./patches/UploadDialog-kZO6Kb_z.js:/app/dist/assets/UploadDialog-kZO6Kb_z.js:ro
+      # 封面功能补丁：drizzle schema + serialize + 前端卡片渲染
+      - ./patches/schema.js:/app/server/db/schema.js:ro
+      - ./patches/roms.js:/app/server/routes/roms.js:ro
+      # 按键映射按账号存服务端（新增路由 + 入口挂载）
+      - ./patches/input-mapping.js:/app/server/routes/input-mapping.js:ro
+      - ./patches/server-index.js:/app/server/index.js:ro
+      # drizzle 迁移补全：db/index.js 修正迁移目录推导；0001 迁移补 input_mappings 表
+      - ./patches/db-index.js:/app/server/db/index.js:ro
+      - ./migrations/0001_input_mappings.sql:/app/server/db/migrations/0001_input_mappings.sql:ro
+      - ./migrations/meta/_journal.json:/app/server/db/migrations/meta/_journal.json:ro
+      - ./patches/Gallery--nH9P_9t.js:/app/dist/assets/Gallery--nH9P_9t.js:ro
+      - ./patches/Gallery-dcHxang3.css:/app/dist/assets/Gallery-dcHxang3.css:ro
+      # 播放器补丁：工具栏「菜单」按钮(F1 呼出 RGUI) + 手柄 Start+Select 呼出菜单
+      - ./patches/Player-BwKb4RpM.js:/app/dist/assets/Player-BwKb4RpM.js:ro
+      - ./patches/fbneo-setnames.json:/app/dist/assets/fbneo-setnames.json:ro
+      - ./patches/Player-CYZDJezR.css:/app/dist/assets/Player-CYZDJezR.css:ro
+      # 平台按键声明补丁：红白机家族补上「连发A/连发B」两行，
+      # 否则按键设置面板会把这两行过滤掉（平台 buttons 数组即过滤器）。
+      # 注意：7 个 chunk 以字面文件名 "./platforms-B-OfxkWt.js" 导入它，必须原地同名覆盖。
+      - ./patches/platforms-remote.js:/app/dist/assets/platforms-B-OfxkWt.js:ro
+      # 封面图片目录（前端以 /covers/*.png 直接访问）
+      - ./covers:/app/dist/covers:ro
+      # ---- 昵称 + 头像（2026-09-15）----
+      # users 表补 nickname / avatar（由 db-index.js 幂等 ALTER）；
+      # auth 路由新增 PATCH /profile、POST|DELETE /avatar、GET /avatar/:file
+      - ./patches/auth-route.js:/app/server/routes/auth.js:ro
+      - ./patches/admin-route.js:/app/server/routes/admin.js:ro
+      - ./patches/rooms-route.js:/app/server/routes/rooms.js:ro
+      - ./patches/room-hub.js:/app/server/room-hub.js:ro
+      # 顶栏昵称/头像 + 用户菜单「个人资料」弹窗；管理后台用户列表头像/昵称
+      - ./patches/index-DBrQhUyq.js:/app/dist/assets/index-DBrQhUyq.js:ro
+      - ./patches/Admin-CLsOmNOk.js:/app/dist/assets/Admin-CLsOmNOk.js:ro
+
+  # ---- 阶段 2 再启用 ----
+  # emulatorjs:
+  #   image: linuxserver/emulatorjs:latest   # 拉取失败可改 1.9.2
+  #   container_name: emulatorjs
+  #   restart: unless-stopped
+  #   ports:
+  #     - "8080:80"      # 游玩前台
+  #     - "4300:3000"    # 管理后台（扫 ROM / 下载核心 / 刮封面）
+  #   environment:
+  #     - PUID=0
+  #     - PGID=0
+  #     - TZ=Asia/Shanghai
+  #   volumes:
+  #     - ./ejs-config:/config
+  #     - ./roms:/data   # 与童年游戏厅共享同一份 ROM
+
+  # ---- Cloudflare Tunnel（已启用，Token 属敏感凭据勿外传）----
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${TUNNEL_TOKEN:?未设置，见 .env.example}
