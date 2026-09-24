@@ -82,6 +82,8 @@ KNOWN_MARKERS = {
                            "axis-bind", "__arcadeAxisName", "__arcadeAxisTok",
                            # 本机已保存的键位不能被 applyMerged 重置掉（游客/401 时「改完键又变回去」）
                            "local-keep",
+                           # 玩家键位保存时带上游戏作用域（否则服务端落到 __global__，改一个游戏会连带全改）
+                           "keymap-scope",
                            # 底部按钮区外观统一（面板底部原来会把三个动作按钮挤成竖排字）
                            "foot-css", "foot-ui", "__arcadeFootCssMod", "ka-grid", "ka-btn"],
     "platforms-remote.js": ["[patch] turbo", '"a","b","x","y"', "X-连发A", "Y-连发B"],
